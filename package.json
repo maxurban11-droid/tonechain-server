@@ -1,11 +1,6 @@
 {
   "name": "tonechain-server",
   "private": true,
-  "type": "module",
-  "engines": { "node": ">=20 <21" },
-  "scripts": {
-    "build": "echo \"no build\""
-  },
-  "dependencies": {},
-  "devDependencies": {}
+  "version": "0.0.1",
+  "license": "MIT"
 }
