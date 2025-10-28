@@ -8,8 +8,6 @@ type Res = {
   end: () => void;
 };
 
-export default function handler(req: Req, res: Res) {
-  if (handleOptions(req, res)) return;
-  setCors(res);
-  res.status(200).send("ok");
+export default function handler(req: any, res: any) {
+  res.status(200).send("ok")
 }
