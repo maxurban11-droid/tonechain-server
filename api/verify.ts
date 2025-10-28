@@ -1,41 +1,62 @@
-import { createHmac } from "crypto";
-import { handleOptions, setCors } from "./_lib/cors";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { SiweMessage } from "siwe";
+import {
+  cors, preflight, sendJSON, verifyNonce, clearCookie, setCookie
+} from "./_utils";
 
-type Req = { method?: string; body?: any };
-type Res = {
-  setHeader: (k: string, v: string) => void;
-  status: (n: number) => Res;
-  json: (d: any) => void;
-  end: () => void;
-};
+const COOKIE_NONCE = "tc_nonce";
+const COOKIE_SIG   = "tc_nsig";
+const COOKIE_SESS  = "tc_sess"; // Demo-Session (nur als Platzhalter)
 
-const DEMO_SECRET = "REPLACE_ME_WITH_A_LONG_RANDOM_SECRET"; // später ENV
+function readCookie(req: VercelRequest, name: string): string | null {
+  const raw = req.headers.cookie || "";
+  const m = raw.split(/;\s*/).find(c => c.startsWith(name + "="));
+  return m ? decodeURIComponent(m.split("=").slice(1).join("=")) : null;
+}
 
-export default function handler(req: Req, res: Res) {
-  if (handleOptions(req, res)) return;
-  setCors(res);
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (preflight(req, res)) return;
+  cors(req, res);
 
   if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
+    sendJSON(res, 405, { error: "Method not allowed" });
     return;
   }
 
   try {
-    const { address, message, signature } = req.body ?? {};
-    if (!address || !message || !signature) {
-      res.status(400).json({ error: "Missing fields" });
+    const { message, signature } = req.body || {};
+    if (!message || !signature) {
+      sendJSON(res, 400, { error: "Missing message/signature" });
       return;
     }
 
-    // ⚠️ Demo: KEINE echte SIWE/EIP-191 Verifikation.
-    // Später: SIWE korrekt prüfen und Nonce serverseitig validieren.
+    // 1) Nonce aus Cookies validieren
+    const nonce = readCookie(req, COOKIE_NONCE);
+    const nsig  = readCookie(req, COOKIE_SIG);
+    const origin = (req.headers.origin as string) || null;
 
-    const payload = JSON.stringify({ sub: address, ts: Date.now() });
-    const mac = createHmac("sha256", DEMO_SECRET).update(payload).digest("hex");
-    const token = Buffer.from(`${payload}.${mac}`).toString("base64url");
+    if (!nonce || !nsig || !verifyNonce(nonce, origin, nsig)) {
+      sendJSON(res, 400, { error: "Invalid or missing nonce" });
+      return;
+    }
 
-    res.status(200).json({ ok: true, token });
+    // 2) SIWE prüfen
+    const msg = new SiweMessage(message);
+    const fields = await msg.validate(signature);
+
+    // 3) Nonce muss SIWE-Message entsprechen
+    if (fields.nonce !== nonce) {
+      sendJSON(res, 400, { error: "Nonce mismatch" });
+      return;
+    }
+
+    // 4) Erfolgreich → Demo-Session setzen (httpOnly)
+    clearCookie(res, COOKIE_NONCE);
+    clearCookie(res, COOKIE_SIG);
+    setCookie(res, COOKIE_SESS, "1", 60 * 30); // 30min
+
+    sendJSON(res, 200, { ok: true, address: fields.address });
   } catch (e: any) {
-    res.status(400).json({ error: e?.message || "verify failed" });
+    sendJSON(res, 400, { error: e?.message || "Verify failed" });
   }
 }
