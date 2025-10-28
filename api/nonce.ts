@@ -1,43 +1,26 @@
 // api/nonce.ts
-import { corsPreflight, json, makeNonce, cookie, FIVE_MIN } from "./_util"
+import { withCors, preflight } from "../lib/cors.js";
+import { setCookie } from "../lib/cookie.js";
 
-export default async function handler(req: Request): Promise<Response> {
-  const pre = corsPreflight(req)
-  if (pre) return pre
+export const config = { runtime: "nodejs18.x" };
 
-  if (req.method !== "GET") {
-    return json({ error: "Method not allowed" }, 405)
-  }
+export default async function handler(req: Request) {
+  const origin = req.headers.get("origin");
 
-  const nonce = makeNonce(16)
-
-  return new Response(JSON.stringify({ nonce }), {
-    status: 200,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "access-control-allow-origin": "*",
-      "set-cookie": [
-        // Nonce 5 Minuten gültig, httpOnly, Secure, Lax
-        cookie("tc_nonce", nonce, { maxAge: FIVE_MIN }),
-      ].join(", ")
-    }
-  })
-  // api/nonce.ts
-export default async function handler(req, res) {
-  const origin = req.headers.origin || null;
   if (req.method === "OPTIONS") {
-    return res.send(preflight(origin)); // 204
+    return preflight(origin);
+  }
+  if (req.method !== "GET") {
+    return withCors(new Response("Method Not Allowed", { status: 405 }), origin);
   }
 
-  // Nonce generieren …
+  // 20 Bytes random → base64url
   const nonce = crypto.randomUUID().replace(/-/g, "");
 
-  // httpOnly Cookie setzen (SameSite=None + Secure!)
-  res.setHeader("Set-Cookie", `tc_nonce=${nonce}; HttpOnly; Path=/; Max-Age=300; SameSite=None; Secure`);
+  const headers = new Headers({
+    "content-type": "application/json",
+    "set-cookie": setCookie("tc_nonce", nonce, 300) // 5 min gültig
+  });
 
-  return withCors(
-    res.json({ nonce }),
-    origin
-  );
-}
+  return withCors(new Response(JSON.stringify({ nonce }), { status: 200, headers }), origin);
 }
