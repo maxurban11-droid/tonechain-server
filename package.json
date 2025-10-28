@@ -1,6 +1,17 @@
 {
   "name": "tonechain-server",
   "private": true,
-  "engines": { "node": ">=18 <21" },
-  "scripts": {}
+  "type": "module",
+  "engines": { "node": ">=20 <21" },
+  "scripts": {
+    "build": "echo \"api-only\"",
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "siwe": "^2.1.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@vercel/node": "^3.0.0"
+  }
 }
