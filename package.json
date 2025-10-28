@@ -1,10 +1,6 @@
 {
   "name": "tonechain-server",
   "private": true,
-  "type": "module",
   "engines": { "node": ">=18 <21" },
-  "scripts": {
-    "build": "echo \"no build\"",
-    "start": "echo \"api-only\""
-  }
+  "scripts": {}
 }
