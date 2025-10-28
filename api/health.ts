@@ -1,13 +1,8 @@
-import { handleOptions, setCors } from "./_lib/cors";
+export default async function handler(req: any, res: any) {
+  res.setHeader("Access-Control-Allow-Origin", "*")
+  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+  if (req.method === "OPTIONS") return res.status(204).end()
 
-type Req = { method?: string };
-type Res = {
-  setHeader: (k: string, v: string) => void;
-  status: (n: number) => Res;
-  send: (s: string) => void;
-  end: () => void;
-};
-
-export default function handler(req: any, res: any) {
-  res.status(200).send("ok")
+  res.status(200).json({ ok: true, ts: Date.now() })
 }
