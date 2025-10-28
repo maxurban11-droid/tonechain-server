@@ -2,14 +2,9 @@
   "name": "tonechain-server",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=18 <21" },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "vercel-build": "tsc -p tsconfig.json"
-  },
-  "dependencies": {
-    "viem": "^2.9.0"
-  },
-  "devDependencies": {
-    "typescript": "^5.6.3"
+    "build": "echo \"no build\"",
+    "start": "echo \"api-only\""
   }
 }
