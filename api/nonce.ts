@@ -22,4 +22,22 @@ export default async function handler(req: Request): Promise<Response> {
       ].join(", ")
     }
   })
+  // api/nonce.ts
+export default async function handler(req, res) {
+  const origin = req.headers.origin || null;
+  if (req.method === "OPTIONS") {
+    return res.send(preflight(origin)); // 204
+  }
+
+  // Nonce generieren …
+  const nonce = crypto.randomUUID().replace(/-/g, "");
+
+  // httpOnly Cookie setzen (SameSite=None + Secure!)
+  res.setHeader("Set-Cookie", `tc_nonce=${nonce}; HttpOnly; Path=/; Max-Age=300; SameSite=None; Secure`);
+
+  return withCors(
+    res.json({ nonce }),
+    origin
+  );
+}
 }
