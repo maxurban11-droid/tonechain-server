@@ -1,0 +1,3 @@
+tonechain login
+address: 0xABCD...
+nonce: <aus /api/nonce>
