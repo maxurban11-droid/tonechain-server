@@ -1,10 +1,10 @@
-// Minimal-CORS utils, ohne externe Typ-Pakete
+// Minimal-CORS ohne externe Typ-Pakete
 type Req = { method?: string };
 type Res = {
   setHeader: (k: string, v: string) => void;
   status: (n: number) => Res;
   json: (d: any) => void;
-  send: (s: string) => void;
+  send?: (s: string) => void;
   end: () => void;
 };
 
