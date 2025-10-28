@@ -1,12 +1,6 @@
 {
   "version": 2,
   "cleanUrls": true,
-  "outputDirectory": ".",
-  "functions": {
-    "api/**/*.ts": {
-      "runtime": "nodejs18.x"
-    }
-  },
   "headers": [
     {
       "source": "/api/(.*)",
