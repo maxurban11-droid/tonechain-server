@@ -1,21 +1,22 @@
-// api/nonce.ts
-import { corsResponse, withCorsJson } from './_utils/cors';
+// /api/nonce.js
+const crypto = require("crypto");
 
-export const config = { runtime: 'nodejs20.x' };
+module.exports = async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") return res.status(204).end();
 
-export default async function handler(req: Request) {
-  if (req.method === 'OPTIONS') return corsResponse(req);
-
-  if (req.method !== 'GET') {
-    return withCorsJson(req, { ok: false, error: 'Method Not Allowed' }, { status: 405 });
+  if (req.method !== "GET") {
+    return res.status(405).json({ ok: false, error: "Method Not Allowed" });
   }
 
-  // stabiler, kryptographisch starker Nonce
-  const nonce = crypto.randomUUID();
+  // Zufälliger Nonce (32 Zeichen)
+  const nonce = crypto.randomBytes(16).toString("hex");
 
-  // Falls du Nonce im Cookie brauchst, hier setzen (optional):
-  // const headers = buildCorsHeaders(req.headers.get('origin'));
-  // headers['Set-Cookie'] = `tc_nonce=${nonce}; Path=/; Max-Age=300; SameSite=Lax; HttpOnly; Secure`;
-
-  return withCorsJson(req, { ok: true, nonce });
-}
+  res.status(200).json({
+    ok: true,
+    nonce,
+    issuedAt: new Date().toISOString()
+  });
+};
