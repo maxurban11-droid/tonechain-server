@@ -1,5 +1,4 @@
 {
-  "regions": ["fra1", "cdg1", "iad1"],
   "cleanUrls": true,
   "headers": [
     {
