@@ -1,18 +1,9 @@
 {
   "name": "tonechain-server",
   "private": true,
-  "license": "MIT",
-  "scripts": {
-    "dev": "vercel dev",
-    "start": "vercel dev",
-    "lint": "echo \"(no linter configured)\"",
-    "build": "echo \"Vercel builds serverless automatically\""
-  },
+  "type": "module",
+  "engines": { "node": ">=18 <21" },
   "dependencies": {
-    "cookie": "^0.6.0",
-    "siwe": "^2.3.2"
-  },
-  "devDependencies": {
-    "typescript": "^5.6.3"
+    "viem": "^2.9.0"
   }
 }
