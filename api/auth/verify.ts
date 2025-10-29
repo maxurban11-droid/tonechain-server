@@ -1,9 +1,9 @@
 // /api/auth/verify.ts
 import { pickOrigin, preflightCORS, corsHeadersFor } from "../../helpers/cors";
 import { securityHeaders } from "../../helpers/headers";
-
-// ethers v6 (in deinem tonechain-server package.json vorhanden)
 import { verifyMessage } from "ethers";
+
+export const config = { runtime: "edge" }; // <-- Edge Runtime
 
 function getCookie(req: Request, name: string): string | null {
   const raw = req.headers.get("cookie") || "";
@@ -31,27 +31,24 @@ export default async function handler(req: Request): Promise<Response> {
     const { message, signature } = await req.json().catch(() => ({} as any));
     if (typeof message !== "string" || typeof signature !== "string") {
       return new Response(JSON.stringify({ ok: false, error: "Missing fields" }), {
-        status: 400,
-        headers,
+        status: 400, headers,
       });
     }
 
     const nonceCookie = getCookie(req, "tc_nonce");
     if (!nonceCookie) {
       return new Response(JSON.stringify({ ok: false, error: "Missing nonce" }), {
-        status: 400,
-        headers,
+        status: 400, headers,
       });
     }
 
-    // Adresse aus Signatur rekonstruieren
     const recovered = verifyMessage(message, signature);
 
-    // Adresse aus Message extrahieren (dein Format setzt die Adresse in Zeile 2)
-    // Beispiel aus AuthWidget:
-    // "<domain> wants you to sign in with your Ethereum account:\n<address>\n\n..."
+    // Adresse & Nonce aus der Nachricht ziehen (entspricht deinem AuthWidget-Format)
     const lines = message.split("\n");
     const msgAddress = (lines[1] || "").trim();
+    const nonceLine = lines.find((l) => l.startsWith("Nonce: "));
+    const msgNonce = nonceLine ? nonceLine.slice("Nonce: ".length).trim() : "";
 
     const addressOk =
       recovered && msgAddress && recovered.toLowerCase() === msgAddress.toLowerCase();
@@ -62,52 +59,26 @@ export default async function handler(req: Request): Promise<Response> {
         { status: 401, headers }
       );
     }
-
-    // Nonce aus Message extrahieren und mit Cookie vergleichen
-    const nonceLine = lines.find((l) => l.startsWith("Nonce: "));
-    const msgNonce = nonceLine ? nonceLine.slice("Nonce: ".length).trim() : "";
     if (!msgNonce || msgNonce !== nonceCookie) {
       return new Response(JSON.stringify({ ok: false, error: "Bad nonce" }), {
-        status: 401,
-        headers,
+        status: 401, headers,
       });
     }
 
-    // Nonce invalidieren (Cookie löschen)
-    headers.append(
-      "Set-Cookie",
-      [
-        "tc_nonce=;",
-        "Path=/",
-        "HttpOnly",
-        "Secure",
-        "SameSite=None",
-        "Max-Age=0",
-      ].join("; ")
+    // Nonce ungültig machen
+    headers.append("Set-Cookie",
+      ["tc_nonce=;", "Path=/", "HttpOnly", "Secure", "SameSite=None", "Max-Age=0"].join("; ")
     );
 
-    // Beispiel: Session-Cookie setzen (Dummy)
+    // einfache „Session“
     const session = `sess_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
-    headers.append(
-      "Set-Cookie",
-      [
-        `tc_session=${encodeURIComponent(session)}`,
-        "Path=/",
-        "HttpOnly",
-        "Secure",
-        "SameSite=None",
-        "Max-Age=86400",
-      ].join("; ")
+    headers.append("Set-Cookie",
+      [`tc_session=${encodeURIComponent(session)}`, "Path=/", "HttpOnly", "Secure", "SameSite=None", "Max-Age=86400"].join("; ")
     );
 
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        address: recovered,
-        ts: new Date().toISOString(),
-      }),
-      { status: 200, headers }
-    );
+    return new Response(JSON.stringify({ ok: true, address: recovered }), {
+      status: 200, headers,
+    });
   } catch (err: any) {
     return new Response(
       JSON.stringify({ ok: false, error: err?.message || "Verify error" }),
