@@ -2,6 +2,8 @@
 import { pickOrigin, preflightCORS, corsHeadersFor } from "../../helpers/cors";
 import { securityHeaders } from "../../helpers/headers";
 
+export const config = { runtime: "edge" }; // <-- Erzwingt Edge, passend zu (req: Request)
+
 export default async function handler(req: Request): Promise<Response> {
   const origin = pickOrigin(req);
   if (!origin) return new Response("Forbidden", { status: 403 });
@@ -13,19 +15,18 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  // Nonce erzeugen
   const nonce =
     (globalThis.crypto as any)?.randomUUID?.() ??
     Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-  // Cookie setzen (HttpOnly, Secure, SameSite=None)
+  // HttpOnly Nonce-Cookie setzen
   const cookie = [
     `tc_nonce=${encodeURIComponent(nonce)}`,
     "Path=/",
     "HttpOnly",
     "Secure",
     "SameSite=None",
-    "Max-Age=300", // 5 Min
+    "Max-Age=300",
   ].join("; ");
 
   const base = securityHeaders(origin);
