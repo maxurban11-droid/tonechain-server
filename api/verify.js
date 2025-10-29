@@ -1,53 +1,62 @@
-// pages/api/verify.ts
-import type { NextApiRequest, NextApiResponse } from "next";
-import { verifyMessage } from "ethers";
-import { ORIGIN_ALLOW_REGEX } from "@/helpers/cors"; // optional re-export
-// kleine Origin-Pick-Funktion für Node:
-function pickOriginNode(req: NextApiRequest): string | null {
-  const o = (req.headers.origin as string) || "";
-  return ORIGIN_ALLOW_REGEX.some((re) => re.test(o)) ? o : null;
-}
+// /api/verify.js — CommonJS, Vercel/Node serverless compatible
+// Expects JSON: { message: string, signature: string }
+const { verifyMessage } = require("ethers");
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const origin = pickOriginNode(req);
-  if (!origin) {
-    res.status(403).end("Forbidden");
-    return;
-  }
-  res.setHeader("Access-Control-Allow-Origin", origin);
+function setCors(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*"); // stateless variant
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
+
+// Minimal streaming JSON body reader (no framework)
+async function readJson(req) {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", (chunk) => (data += chunk));
+    req.on("end", () => {
+      try {
+        resolve(data ? JSON.parse(data) : {});
+      } catch {
+        reject(new Error("Invalid JSON"));
+      }
+    });
+    req.on("error", (e) => reject(e));
+  });
+}
+
+module.exports = async (req, res) => {
+  setCors(res);
 
   if (req.method === "OPTIONS") {
-    res.status(204).end();
-    return;
+    return res.status(204).end();
   }
   if (req.method !== "POST") {
-    res.status(405).json({ ok: false, error: "Method Not Allowed" });
-    return;
+    return res.status(405).json({ ok: false, error: "Method Not Allowed" });
   }
 
   try {
-    const { message, signature, expectedAddress } = req.body ?? {};
-    if (
-      typeof message !== "string" ||
-      typeof signature !== "string" ||
-      typeof expectedAddress !== "string" ||
-      !message || !signature || !expectedAddress
-    ) {
-      res.status(400).json({ ok: false, error: "Missing fields" });
-      return;
+    const body = await readJson(req);
+    const { message, signature } = body || {};
+
+    if (typeof message !== "string" || typeof signature !== "string" || !message || !signature) {
+      return res.status(400).json({ ok: false, error: "Missing fields" });
     }
+
+    // Recover signer address from signature
     const recovered = verifyMessage(message, signature);
-    const match = recovered?.toLowerCase() === expectedAddress.toLowerCase();
-    if (!match) {
-      res.status(401).json({ ok: false, error: "Signature mismatch", recovered });
-      return;
+    if (!recovered) {
+      return res.status(401).json({ ok: false, error: "Invalid signature" });
     }
-    res.status(200).json({ ok: true, verified: true, address: recovered, ts: new Date().toISOString() });
+
+    // Stateless OK (kein Nonce-/Session-Check hier)
+    return res.status(200).json({
+      ok: true,
+      address: recovered,
+      ts: new Date().toISOString(),
+    });
   } catch (err) {
     console.error("Verify error:", err);
-    res.status(500).json({ ok: false, error: "Server verify error" });
+    return res.status(500).json({ ok: false, error: "Server verify error" });
   }
-}
+};
