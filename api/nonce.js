@@ -1,28 +1,3 @@
-import { pickOrigin, preflightCORS } from "../helpers/cors"
-import { securityHeaders } from "../helpers/headers"
-
-export const config = { runtime: "edge" }
-
-export default async function handler(req: Request) {
-  const origin = pickOrigin(req)
-  if (!origin) return new Response("Forbidden", { status: 403 })
-
-  const pre = preflightCORS(req, origin)
-  if (pre) return pre
-
-  if (req.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 })
-  }
-
-  // generate nonce (httpOnly cookie recommended; hier als JSON minimal)
-  const nonce = crypto.randomUUID()
-
-  const headers = securityHeaders(origin)
-  headers.set("Content-Type", "application/json; charset=utf-8")
-
-  return new Response(JSON.stringify({ nonce }), { status: 200, headers })
-}
-
 // helpers/headers.ts
 export function securityHeaders(origin?: string) {
   const h = new Headers()
@@ -63,6 +38,30 @@ export function preflightCORS(req: Request, origin: string) {
   h.set("Access-Control-Max-Age", "600")
   h.set("Vary", "Origin")
   return new Response(null, { status: 204, headers: h })
+}
+import { pickOrigin, preflightCORS } from "../helpers/cors"
+import { securityHeaders } from "../helpers/headers"
+
+export const config = { runtime: "edge" }
+
+export default async function handler(req: Request) {
+  const origin = pickOrigin(req)
+  if (!origin) return new Response("Forbidden", { status: 403 })
+
+  const pre = preflightCORS(req, origin)
+  if (pre) return pre
+
+  if (req.method !== "POST") {
+    return new Response("Method Not Allowed", { status: 405 })
+  }
+
+  // generate nonce (httpOnly cookie recommended; hier als JSON minimal)
+  const nonce = crypto.randomUUID()
+
+  const headers = securityHeaders(origin)
+  headers.set("Content-Type", "application/json; charset=utf-8")
+
+  return new Response(JSON.stringify({ nonce }), { status: 200, headers })
 }
 
 // /api/nonce.js
