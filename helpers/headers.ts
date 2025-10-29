@@ -1,7 +1,6 @@
 export function securityHeaders(origin?: string) {
   const h = new Headers()
-  h.set(
-    "Content-Security-Policy",
+  h.set("Content-Security-Policy",
     "default-src 'none'; img-src 'none'; font-src 'none'; style-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; connect-src 'self';"
   )
   h.set("Referrer-Policy", "no-referrer")
@@ -12,7 +11,6 @@ export function securityHeaders(origin?: string) {
   h.set("Permissions-Policy", "accelerometer=(), geolocation=(), camera=(), microphone=()")
   if (origin) {
     h.set("Access-Control-Allow-Origin", origin)
-    h.set("Access-Control-Allow-Credentials", "true")
     h.set("Vary", "Origin")
   }
   return h
