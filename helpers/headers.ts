@@ -10,9 +10,13 @@ export function securityHeaders(origin?: string) {
   h.set("X-Frame-Options", "DENY");
   h.set("Cross-Origin-Opener-Policy", "same-origin");
   h.set("Cross-Origin-Resource-Policy", "same-site");
-  h.set("Permissions-Policy", "accelerometer=(), geolocation=(), camera=(), microphone=()");
+  h.set(
+    "Permissions-Policy",
+    "accelerometer=(), geolocation=(), camera=(), microphone=()"
+  );
   if (origin) {
     h.set("Access-Control-Allow-Origin", origin);
+    h.set("Access-Control-Allow-Credentials", "true");
     h.set("Vary", "Origin");
   }
   return h;
