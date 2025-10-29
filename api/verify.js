@@ -1,60 +1,33 @@
-// helpers/headers.ts
-export function securityHeaders(origin?: string) {
-  const h = new Headers()
-  h.set("Content-Security-Policy",
-    "default-src 'none'; img-src 'none'; font-src 'none'; style-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; connect-src 'self';"
-  )
-  h.set("Referrer-Policy", "no-referrer")
-  h.set("X-Content-Type-Options", "nosniff")
-  h.set("X-Frame-Options", "DENY")
-  h.set("Cross-Origin-Opener-Policy", "same-origin")
-  h.set("Cross-Origin-Resource-Policy", "same-site")
-  h.set("Permissions-Policy", "accelerometer=(), geolocation=(), camera=(), microphone=()")
-  // CORS (streng, siehe unten)
-  if (origin) {
-    h.set("Access-Control-Allow-Origin", origin)
-    h.set("Vary", "Origin")
+// /api/verify.js — Defensive SIWE Verify (Node runtime), kompatibel zu deiner bisherigen API
+
+// Kein Top-Level-Import von "ethers": v6 ist ESM-only → dynamisch und nur bei Bedarf laden.
+let _verifyMessage;
+async function getVerifyMessage() {
+  if (_verifyMessage) return _verifyMessage;
+  const mod = await import("ethers");
+  _verifyMessage = mod.verifyMessage || (mod.ethers && mod.ethers.verifyMessage);
+  if (typeof _verifyMessage !== "function") {
+    throw new Error("verifyMessage not available from ethers");
   }
-  return h
+  return _verifyMessage;
 }
 
-// helpers/cors.ts
-const ALLOWED_ORIGINS = [
-  "https://your-framer-site.framer.website", // <— deine Framer-Domain
-  "https://www.tonechain.xyz",               // <— deine Prod-Domain (wenn vorhanden)
-]
-
-export function pickOrigin(req: Request): string | null {
-  const o = req.headers.get("origin") || ""
-  return ALLOWED_ORIGINS.includes(o) ? o : null
-}
-
-export function preflightCORS(req: Request, origin: string) {
-  if (req.method !== "OPTIONS") return null
-  const h = new Headers()
-  h.set("Access-Control-Allow-Origin", origin)
-  h.set("Access-Control-Allow-Methods", "POST, OPTIONS")
-  h.set("Access-Control-Allow-Headers", "content-type")
-  h.set("Access-Control-Max-Age", "600")
-  h.set("Vary", "Origin")
-  return new Response(null, { status: 204, headers: h })
-}
-
-// /api/verify.js
-// Defensive SIWE-Verify (vereinfacht): verifiziert die Signatur einer Nachricht.
-// Erwartet JSON-Body: { message: string, signature: string, expectedAddress: string }
-
-const { verifyMessage } = require("ethers");
-
-// kleine Helfer, um den JSON-Body zuverlässig einzulesen
+// Robust: kleinen JSON-Body einlesen, mit Größenlimit
 async function readJson(req) {
   return new Promise((resolve, reject) => {
     let data = "";
-    req.on("data", (chunk) => { data += chunk; });
+    const MAX = 10 * 1024; // 10KB
+    req.on("data", (chunk) => {
+      data += chunk;
+      if (data.length > MAX) {
+        reject(new Error("Payload too large"));
+        req.destroy();
+      }
+    });
     req.on("end", () => {
       try {
         resolve(data ? JSON.parse(data) : {});
-      } catch (e) {
+      } catch (_e) {
         reject(new Error("Invalid JSON"));
       }
     });
@@ -63,10 +36,12 @@ async function readJson(req) {
 }
 
 module.exports = async (req, res) => {
-  // CORS – erstmal permissiv (für Tests); später Domain whitelisten
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // CORS (kompatibel, aber vollständig)
+  const origin = req.headers.origin || "*";
+  res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Vary", "Origin");
   if (req.method === "OPTIONS") return res.status(204).end();
 
   if (req.method !== "POST") {
@@ -74,21 +49,19 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const body = await readJson(req); // <— WICHTIG: Body selbst lesen
+    const body = await readJson(req);
     const { message, signature, expectedAddress } = body || {};
 
     if (
       typeof message !== "string" ||
       typeof signature !== "string" ||
       typeof expectedAddress !== "string" ||
-      !message ||
-      !signature ||
-      !expectedAddress
+      !message || !signature || !expectedAddress
     ) {
       return res.status(400).json({ ok: false, error: "Missing fields" });
     }
 
-    // ECDSA-Recover → Adresse aus Signatur gewinnen
+    const verifyMessage = await getVerifyMessage();
     const recovered = verifyMessage(message, signature);
 
     const match =
@@ -99,8 +72,6 @@ module.exports = async (req, res) => {
       return res.status(401).json({ ok: false, error: "Signature mismatch", recovered });
     }
 
-    // Optional: hier könntest du eine Session setzen (HTTP-only Cookie)
-    // Für jetzt nur Bestätigung zurückgeben:
     return res.status(200).json({
       ok: true,
       verified: true,
@@ -108,6 +79,13 @@ module.exports = async (req, res) => {
       ts: new Date().toISOString(),
     });
   } catch (err) {
+    const msg = String(err && err.message || "");
+    if (msg.toLowerCase().includes("payload too large")) {
+      return res.status(413).json({ ok: false, error: "Payload too large" });
+    }
+    if (msg.toLowerCase().includes("invalid json")) {
+      return res.status(400).json({ ok: false, error: "Invalid JSON" });
+    }
     console.error("Verify error:", err);
     return res.status(500).json({ ok: false, error: "Server verify error" });
   }
