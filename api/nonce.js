@@ -1,35 +1,24 @@
-// /api/nonce.js  (Edge Runtime, pures JS – keine TS-Typen)
-import { pickOrigin, preflightCORS } from "../helpers/cors"
-import { securityHeaders } from "../helpers/headers"
+// /api/nonce.js  — CommonJS, Vercel/Node serverless compatible
+const crypto = require("crypto");
 
-export const config = { runtime: "edge" }
+function setCors(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*"); // stateless variant
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
 
-export default async function handler(req) {
-  const origin = pickOrigin(req)
-  if (!origin) return new Response("Forbidden", { status: 403 })
+module.exports = async (req, res) => {
+  setCors(res);
 
-  // CORS Preflight
-  const pre = preflightCORS(req, origin)
-  if (pre) return pre
-
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
   if (req.method !== "GET") {
-    return new Response("Method Not Allowed", { status: 405 })
+    return res.status(405).json({ ok: false, error: "Method Not Allowed" });
   }
 
-  // Nonce: bevorzugt Edge/Web Crypto, sonst stabiler Fallback
-  const rand =
-    (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function")
-      ? globalThis.crypto.randomUUID()
-      : Math.random().toString(36).slice(2) + Date.now().toString(36)
-
-  const headers = securityHeaders(origin)
-  headers.set("Content-Type", "application/json; charset=utf-8")
-
-  const body = JSON.stringify({
-    ok: true,
-    nonce: rand,
-    issuedAt: new Date().toISOString(),
-  })
-
-  return new Response(body, { status: 200, headers })
-}
+  // simple random nonce (32 hex characters)
+  const nonce = crypto.randomBytes(16).toString("hex");
+  return res.status(200).json({ ok: true, nonce, issuedAt: new Date().toISOString() });
+};
