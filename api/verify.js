@@ -1,92 +1,53 @@
-// /api/verify.js — Defensive SIWE Verify (Node runtime), kompatibel zu deiner bisherigen API
+// pages/api/verify.ts
+import type { NextApiRequest, NextApiResponse } from "next";
+import { verifyMessage } from "ethers";
+import { ORIGIN_ALLOW_REGEX } from "@/helpers/cors"; // optional re-export
+// kleine Origin-Pick-Funktion für Node:
+function pickOriginNode(req: NextApiRequest): string | null {
+  const o = (req.headers.origin as string) || "";
+  return ORIGIN_ALLOW_REGEX.some((re) => re.test(o)) ? o : null;
+}
 
-// Kein Top-Level-Import von "ethers": v6 ist ESM-only → dynamisch und nur bei Bedarf laden.
-let _verifyMessage;
-async function getVerifyMessage() {
-  if (_verifyMessage) return _verifyMessage;
-  const mod = await import("ethers");
-  _verifyMessage = mod.verifyMessage || (mod.ethers && mod.ethers.verifyMessage);
-  if (typeof _verifyMessage !== "function") {
-    throw new Error("verifyMessage not available from ethers");
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const origin = pickOriginNode(req);
+  if (!origin) {
+    res.status(403).end("Forbidden");
+    return;
   }
-  return _verifyMessage;
-}
-
-// Robust: kleinen JSON-Body einlesen, mit Größenlimit
-async function readJson(req) {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    const MAX = 10 * 1024; // 10KB
-    req.on("data", (chunk) => {
-      data += chunk;
-      if (data.length > MAX) {
-        reject(new Error("Payload too large"));
-        req.destroy();
-      }
-    });
-    req.on("end", () => {
-      try {
-        resolve(data ? JSON.parse(data) : {});
-      } catch (_e) {
-        reject(new Error("Invalid JSON"));
-      }
-    });
-    req.on("error", (e) => reject(e));
-  });
-}
-
-module.exports = async (req, res) => {
-  // CORS (kompatibel, aber vollständig)
-  const origin = req.headers.origin || "*";
   res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Vary", "Origin");
-  if (req.method === "OPTIONS") return res.status(204).end();
 
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
   if (req.method !== "POST") {
-    return res.status(405).json({ ok: false, error: "Method Not Allowed" });
+    res.status(405).json({ ok: false, error: "Method Not Allowed" });
+    return;
   }
 
   try {
-    const body = await readJson(req);
-    const { message, signature, expectedAddress } = body || {};
-
+    const { message, signature, expectedAddress } = req.body ?? {};
     if (
       typeof message !== "string" ||
       typeof signature !== "string" ||
       typeof expectedAddress !== "string" ||
       !message || !signature || !expectedAddress
     ) {
-      return res.status(400).json({ ok: false, error: "Missing fields" });
+      res.status(400).json({ ok: false, error: "Missing fields" });
+      return;
     }
-
-    const verifyMessage = await getVerifyMessage();
     const recovered = verifyMessage(message, signature);
-
-    const match =
-      recovered &&
-      recovered.toLowerCase() === expectedAddress.toLowerCase();
-
+    const match = recovered?.toLowerCase() === expectedAddress.toLowerCase();
     if (!match) {
-      return res.status(401).json({ ok: false, error: "Signature mismatch", recovered });
+      res.status(401).json({ ok: false, error: "Signature mismatch", recovered });
+      return;
     }
-
-    return res.status(200).json({
-      ok: true,
-      verified: true,
-      address: recovered,
-      ts: new Date().toISOString(),
-    });
+    res.status(200).json({ ok: true, verified: true, address: recovered, ts: new Date().toISOString() });
   } catch (err) {
-    const msg = String(err && err.message || "");
-    if (msg.toLowerCase().includes("payload too large")) {
-      return res.status(413).json({ ok: false, error: "Payload too large" });
-    }
-    if (msg.toLowerCase().includes("invalid json")) {
-      return res.status(400).json({ ok: false, error: "Invalid JSON" });
-    }
     console.error("Verify error:", err);
-    return res.status(500).json({ ok: false, error: "Server verify error" });
+    res.status(500).json({ ok: false, error: "Server verify error" });
   }
-};
+}
