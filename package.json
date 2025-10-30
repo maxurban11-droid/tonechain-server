@@ -1,4 +1,5 @@
 {
+  npm i siwe
   "name": "tonechain-server",
   "private": true,
   "type": "commonjs",
