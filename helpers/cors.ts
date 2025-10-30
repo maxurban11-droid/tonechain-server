@@ -1,45 +1,24 @@
 // helpers/cors.ts
-const ORIGIN_ALLOW_REGEX: RegExp[] = [
-  /^https:\/\/([a-z0-9-]+\.)*framer\.app$/i,
-  /^https:\/\/([a-z0-9-]+\.)*framer\.website$/i,
-  /^https:\/\/tonechain\.xyz$/i,
-  /^https:\/\/www\.tonechain\.xyz$/i,
-];
+import { ALLOWED_ORIGINS } from "./env";
 
-const ORIGIN_ALLOW_EXACT = new Set<string>([
-  // Trage hier optional *konkrete* Preview-URLs ein, z. B.:
-  "https://concave-device-193297.framer.app",
-]);
+export function corsHeaders(originHeader?: string) {
+  const origin = originHeader || "";
+  const allowAll = ALLOWED_ORIGINS.length === 0;
+  const allowed =
+    allowAll || ALLOWED_ORIGINS.some(o => o.toLowerCase() === origin.toLowerCase());
 
-export function pickOrigin(req: Request): string | null {
-  const o = req.headers.get("origin") || "";
-  if (!o) return null;
-  if (ORIGIN_ALLOW_EXACT.has(o)) return o;
-  if (ORIGIN_ALLOW_REGEX.some((re) => re.test(o))) return o;
-  return null;
+  const headers: Record<string, string> = {
+    "Vary": "Origin",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  };
+  if (allowed) headers["Access-Control-Allow-Origin"] = origin;
+  return headers;
 }
 
-export function corsHeadersFor(origin: string): Headers {
-  const h = new Headers();
-  h.set("Access-Control-Allow-Origin", origin);
-  h.set("Access-Control-Allow-Credentials", "true"); // <- WICHTIG bei credentials: "include"
-  h.set("Vary", "Origin");
-  return h;
-}
-
-export function preflightCORS(
-  req: Request,
-  origin: string,
-  {
-    allowMethods = "GET,POST,OPTIONS",
-    allowHeaders = "content-type, authorization",
-    maxAge = "600",
-  }: { allowMethods?: string; allowHeaders?: string; maxAge?: string } = {}
-) {
+export function preflight(req: Request): Response | null {
   if (req.method !== "OPTIONS") return null;
-  const h = corsHeadersFor(origin);
-  h.set("Access-Control-Allow-Methods", allowMethods);
-  h.set("Access-Control-Allow-Headers", allowHeaders);
-  h.set("Access-Control-Max-Age", maxAge);
-  return new Response(null, { status: 204, headers: h });
+  const headers = corsHeaders(req.headers.get("Origin") || undefined);
+  return new Response(null, { status: 204, headers });
 }
